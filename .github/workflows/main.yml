@@ -1,4 +1,4 @@
-name: Generate Wayland Protocol
+name: Generate Wayland Protocols
 
 on:
   push:
@@ -16,7 +16,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -25,26 +26,37 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            wayland-protocols \
-            libwayland-dev
+            libwayland-dev \
+            wayland-protocols
 
       - name: Create output directory
-        run: |
-          mkdir -p src/protocol
+        run: mkdir -p src/protocol
 
-      - name: Generate C source
+      - name: Generate all protocols
+        shell: bash
         run: |
-          wayland-scanner private-code \
-            protocols/gtk-shell.xml \
-            src/protocol/gtk-shell-protocol.c
+          shopt -s nullglob
 
-      - name: Generate client header
-        run: |
-          wayland-scanner client-header \
-            protocols/gtk-shell.xml \
-            src/protocol/gtk-shell-client-protocol.h
+          for xml in protocols/*.xml; do
+              name=$(basename "$xml" .xml)
 
-      - name: Commit and push generated files
+              echo "Generating $name"
+
+              wayland-scanner client-header \
+                  "$xml" \
+                  "src/protocol/${name}-client-protocol.h"
+
+              wayland-scanner server-header \
+                  "$xml" \
+                  "src/protocol/${name}-server-protocol.h"
+
+              wayland-scanner private-code \
+                  "$xml" \
+                  "src/protocol/${name}-protocol.c"
+          done
+
+      - name: Commit and push
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -52,9 +64,9 @@ jobs:
           git add src/protocol
 
           if git diff --cached --quiet; then
-            echo "Nothing to commit."
-            exit 0
+              echo "No generated changes."
+              exit 0
           fi
 
-          git commit -m "Auto-generate Wayland protocol"
+          git commit -m "Auto-generate Wayland protocols"
           git push origin HEAD:${{ github.ref_name }}

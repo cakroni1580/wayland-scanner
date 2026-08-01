@@ -1,0 +1,59 @@
+name: Generate Wayland Protocol
+
+on:
+  push:
+    paths:
+      - "protocols/*.xml"
+      - ".github/workflows/generate-wayland-protocol.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install wayland-scanner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            wayland-protocols \
+            libwayland-dev
+
+      - name: Create output directory
+        run: |
+          mkdir -p src/protocol
+
+      - name: Generate C source
+        run: |
+          wayland-scanner private-code \
+            protocols/gtk-shell.xml \
+            src/protocol/gtk-shell-protocol.c
+
+      - name: Generate client header
+        run: |
+          wayland-scanner client-header \
+            protocols/gtk-shell.xml \
+            src/protocol/gtk-shell-client-protocol.h
+
+      - name: Commit generated files
+        run: |
+          if git diff --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add src/protocol
+          git commit -m "Auto-generate Wayland protocol"
+          git push
